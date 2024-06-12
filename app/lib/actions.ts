@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { sql } from '@vercel/postgres'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { signIn } from '@/auth'
+import { AuthError } from 'next-auth'
 
 const FormSchema = z.object({
   id: z.string(),
@@ -107,7 +109,6 @@ export async function updateInvoice (id: string, prevState: State, formData: For
 }
 
 export async function deleteInvoice (id: string) {
-  throw new Error('Failed to delete invoice.')
   try {
     await sql`DELETE FROM invoices WHERE id=${id}`
     revalidatePath('/dashboard/invoices')
@@ -116,5 +117,26 @@ export async function deleteInvoice (id: string) {
     return {
       message: 'Database Error: Failed to Delete Invoice.'
     }
+  }
+}
+
+export async function authenticate (
+  prevState: string | undefined,
+  formData: FormData
+) {
+  try {
+    await signIn('credentials', formData)
+  } catch (error) {
+    // Throwing an error in NextAuth authorize now returns a CallbackRouteError to avoid exposing information to the client.
+    // This means default catch all in switch will return on a CredentialsSignIn error: https://github.com/nextauthjs/next-auth/issues/6512
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case 'CredentialsSignin':
+          return 'Invalid credentials.'
+        default:
+          return 'Something went wrong.'
+      }
+    }
+    throw error
   }
 }
